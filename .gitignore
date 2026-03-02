@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Models (baked in Docker, not in repo)
+models/
+*.pth
+*.onnx
+*.bin
+
+# Environment
+.env
+.env.local
+.env.production
+
+# Docker
+*.tar
+*.gz
