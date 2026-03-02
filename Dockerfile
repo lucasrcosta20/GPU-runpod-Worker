@@ -29,9 +29,16 @@ RUN curl -fsSL https://ollama.com/install.sh | sh
 # ---- Python dependencies ----
 WORKDIR /app
 
-COPY requirements.txt .
+# Upgrade pip first (Ubuntu 22.04 ships old pip)
+RUN python3 -m pip install --break-system-packages --upgrade pip setuptools wheel
+
+# Install PyTorch with CUDA 12.1 first (separate step for caching)
+# Using --extra-index-url to allow fallback to PyPI for torchvision deps
 RUN pip install --no-cache-dir --break-system-packages \
-    torch torchvision --index-url https://download.pytorch.org/whl/cu121
+    torch==2.1.2+cu121 torchvision==0.16.2+cu121 \
+    --extra-index-url https://download.pytorch.org/whl/cu121
+
+COPY requirements.txt .
 RUN pip install --no-cache-dir --break-system-packages -r requirements.txt
 
 # ---- Bake Ollama models ----
