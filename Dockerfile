@@ -30,7 +30,9 @@ RUN curl -fsSL https://ollama.com/install.sh | sh
 WORKDIR /app
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --break-system-packages \
+    torch torchvision --index-url https://download.pytorch.org/whl/cu121
+RUN pip install --no-cache-dir --break-system-packages -r requirements.txt
 
 # ---- Bake Ollama models ----
 # Start Ollama temporarily to pull models, then stop
