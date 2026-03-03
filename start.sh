@@ -1,6 +1,9 @@
 #!/bin/bash
 set -e
 
+# Ensure ollama is in PATH (Pod mode: installed via curl to /usr/local/bin)
+export PATH=$PATH:/usr/local/bin
+
 echo "=== GPU Worker Starting ==="
 
 # 1. Auto-detect VRAM and configure Ollama parallelism BEFORE starting
