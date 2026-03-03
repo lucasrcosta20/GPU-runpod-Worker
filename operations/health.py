@@ -4,9 +4,11 @@ Health check operation.
 Returns GPU info, Ollama status, and loaded models.
 """
 
+import os
+
 import requests
 
-from operations.gpu_info import get_gpu_name, get_vram_total_mb
+from operations.gpu_info import get_gpu_name, get_vram_total_mb, get_vram_free_mb
 
 
 OLLAMA_URL = "http://localhost:11434"
@@ -14,7 +16,8 @@ OLLAMA_URL = "http://localhost:11434"
 
 def check_health() -> dict:
     """
-    Check worker health: GPU device, VRAM, Ollama status, loaded models.
+    Check worker health: GPU device, VRAM, Ollama status, loaded models,
+    and parallelism config.
 
     Returns:
         Dict with health information.
@@ -23,7 +26,9 @@ def check_health() -> dict:
         "status": "ok",
         "gpu_device": get_gpu_name(),
         "vram_total_mb": get_vram_total_mb(),
+        "vram_free_mb": get_vram_free_mb(),
         "ollama_available": False,
+        "ollama_num_parallel": int(os.environ.get("OLLAMA_NUM_PARALLEL", 1)),
         "models_loaded": [],
     }
 

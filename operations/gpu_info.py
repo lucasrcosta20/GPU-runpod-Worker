@@ -29,3 +29,29 @@ def get_vram_total_mb() -> int:
         return int(out.strip().split("\n")[0])
     except Exception:
         return 0
+
+
+def get_vram_free_mb() -> int:
+    """Get free VRAM in MB via nvidia-smi."""
+    try:
+        out = subprocess.check_output(
+            ["nvidia-smi", "--query-gpu=memory.free", "--format=csv,noheader,nounits"],
+            timeout=5,
+            text=True,
+        )
+        return int(out.strip().split("\n")[0])
+    except Exception:
+        return 0
+
+def get_vram_free_mb() -> int:
+    """Get free VRAM in MB via nvidia-smi."""
+    try:
+        out = subprocess.check_output(
+            ["nvidia-smi", "--query-gpu=memory.free", "--format=csv,noheader,nounits"],
+            timeout=5,
+            text=True,
+        )
+        return int(out.strip().split("\n")[0])
+    except Exception:
+        return 0
+
