@@ -17,12 +17,20 @@ import runpod
 from security.hmac_validator import validate_hmac
 from operations.health import check_health
 from operations.llm import generate as llm_generate
+from operations.llm_batch import generate_batch as llm_generate_batch
 from operations.remove_bg import remove_background
+from operations.remove_bg_batch import remove_background_batch
 from operations.upscale import upscale
+from operations.upscale_batch import upscale_batch as upscale_batch_op
 from operations.resize import resize
 
 
-VALID_OPERATIONS = {"health", "llm", "remove_bg", "upscale", "resize"}
+VALID_OPERATIONS = {
+    "health", "llm", "llm_batch",
+    "remove_bg", "remove_bg_batch",
+    "upscale", "upscale_batch",
+    "resize",
+}
 
 
 def handler(event: dict) -> dict:
@@ -59,11 +67,20 @@ def handler(event: dict) -> dict:
         if operation == "llm":
             return _handle_llm(input_data)
 
+        if operation == "llm_batch":
+            return _handle_llm_batch(input_data)
+
         if operation == "remove_bg":
             return _handle_remove_bg(input_data)
 
+        if operation == "remove_bg_batch":
+            return _handle_remove_bg_batch(input_data)
+
         if operation == "upscale":
             return _handle_upscale(input_data)
+
+        if operation == "upscale_batch":
+            return _handle_upscale_batch(input_data)
 
         if operation == "resize":
             return _handle_resize(input_data)
@@ -93,6 +110,30 @@ def _handle_llm(data: dict) -> dict:
         max_tokens=max_tokens,
         timeout=timeout,
         images=images,
+    )
+
+
+def _handle_llm_batch(data: dict) -> dict:
+    """Route LLM batch operation."""
+    items = data.get("items", [])
+    if not items:
+        return {"error": "Missing 'items' field (list of prompts)"}
+
+    model = data.get("model", "llama3.1:8b")
+    system_prompt = data.get("system_prompt", "")
+    temperature = data.get("temperature", 0.7)
+    max_tokens = data.get("max_tokens", 2000)
+    timeout = data.get("timeout", 300)
+    max_parallel = data.get("max_parallel", 4)
+
+    return llm_generate_batch(
+        items=items,
+        model=model,
+        system_prompt=system_prompt,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        timeout=timeout,
+        max_parallel=max_parallel,
     )
 
 
@@ -131,6 +172,42 @@ def _handle_upscale(data: dict) -> dict:
         denoise_strength=config.get("denoise_strength", 0.0),
         sharpen_amount=config.get("sharpen_amount", 0.2),
         sharpen_radius=config.get("sharpen_radius", 1.0),
+    )
+
+
+def _handle_remove_bg_batch(data: dict) -> dict:
+    """Route remove_bg_batch operation."""
+    items = data.get("items", [])
+    if not items:
+        return {"error": "Missing 'items' field (list of images)"}
+
+    config = data.get("config", {})
+    bg_model = config.get("bg_model", "birefnet-general")
+    max_parallel = data.get("max_parallel", 3)
+
+    return remove_background_batch(
+        items=items,
+        bg_model=bg_model,
+        max_parallel=max_parallel,
+    )
+
+
+def _handle_upscale_batch(data: dict) -> dict:
+    """Route upscale_batch operation."""
+    items = data.get("items", [])
+    if not items:
+        return {"error": "Missing 'items' field (list of images)"}
+
+    config = data.get("config", {})
+    max_parallel = data.get("max_parallel", 2)
+
+    return upscale_batch_op(
+        items=items,
+        upscale_factor=config.get("upscale_factor", 2),
+        denoise_strength=config.get("denoise_strength", 0.0),
+        sharpen_amount=config.get("sharpen_amount", 0.2),
+        sharpen_radius=config.get("sharpen_radius", 1.0),
+        max_parallel=max_parallel,
     )
 
 

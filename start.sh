@@ -26,6 +26,11 @@ done
 echo "Available models:"
 ollama list
 
-# 3. Start Runpod handler
-echo "Starting Runpod handler..."
+# 3. Configure Ollama parallelism for batch processing
+# RTX 4090 (24GB VRAM) with llama3.1:8b (~5GB) supports 4 parallel requests
+export OLLAMA_NUM_PARALLEL=4
+export OLLAMA_MAX_LOADED_MODELS=2
+
+# 4. Start Runpod handler
+echo "Starting Runpod handler (OLLAMA_NUM_PARALLEL=$OLLAMA_NUM_PARALLEL)..."
 python handler.py
