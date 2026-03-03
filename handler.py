@@ -229,5 +229,7 @@ def _handle_resize(data: dict) -> dict:
     )
 
 
-# Start Runpod Serverless handler
-runpod.serverless.start({"handler": handler})
+# Start Runpod Serverless handler (skip when running as Pod HTTP server)
+import os
+if os.environ.get("POD_MODE") != "1":
+    runpod.serverless.start({"handler": handler})

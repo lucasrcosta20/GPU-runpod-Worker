@@ -49,6 +49,11 @@ done
 echo "Available models:"
 ollama list
 
-# 4. Start Runpod handler
-echo "Starting Runpod handler..."
-python handler.py
+# 4. Start worker (Serverless handler or Pod HTTP server)
+if [ "$POD_MODE" = "1" ]; then
+    echo "Starting Pod HTTP server on port ${POD_SERVER_PORT:-8000}..."
+    python pod_server.py
+else
+    echo "Starting Runpod Serverless handler..."
+    python handler.py
+fi
