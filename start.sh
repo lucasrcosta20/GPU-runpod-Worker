@@ -3,8 +3,13 @@ set -e
 
 echo "=== GPU Worker Starting ==="
 
-# 1. Start Ollama in background
-echo "Starting Ollama..."
+# 1. Configure Ollama parallelism BEFORE starting (read at startup)
+# RTX 4090 (24GB VRAM) with llama3.1:8b (~5GB) supports 4 parallel requests
+export OLLAMA_NUM_PARALLEL=4
+export OLLAMA_MAX_LOADED_MODELS=2
+
+# 2. Start Ollama in background
+echo "Starting Ollama (OLLAMA_NUM_PARALLEL=$OLLAMA_NUM_PARALLEL)..."
 ollama serve &
 OLLAMA_PID=$!
 
@@ -22,15 +27,10 @@ for i in $(seq 1 30); do
     sleep 1
 done
 
-# 2. List available models
+# 3. List available models
 echo "Available models:"
 ollama list
 
-# 3. Configure Ollama parallelism for batch processing
-# RTX 4090 (24GB VRAM) with llama3.1:8b (~5GB) supports 4 parallel requests
-export OLLAMA_NUM_PARALLEL=4
-export OLLAMA_MAX_LOADED_MODELS=2
-
 # 4. Start Runpod handler
-echo "Starting Runpod handler (OLLAMA_NUM_PARALLEL=$OLLAMA_NUM_PARALLEL)..."
+echo "Starting Runpod handler..."
 python handler.py
