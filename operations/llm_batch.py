@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Optional
 from operations.llm import generate as generate_single
 
 
+
 def generate_batch(
     items: List[Dict[str, Any]],
     model: str = "llama3.1:8b",
@@ -41,9 +42,11 @@ def generate_batch(
 
     Returns:
         Dict with 'results' (list in same order), 'total_time_seconds',
-        'successful', 'failed'.
+        'successful', 'failed', 'total_items', 'items_per_minute',
+        'total_tokens', 'tokens_per_second'.
     """
     start = time.time()
+    print(f"[LLM_BATCH] Starting batch: {len(items)} items, model={model}, parallel={max_parallel}")
 
     if not items:
         return {
@@ -109,6 +112,15 @@ def generate_batch(
                 failed += 1
 
     elapsed = time.time() - start
+    total_tokens = sum(r.get("tokens_generated", 0) for r in results if r)
+    items_per_min = round((len(items) / elapsed) * 60, 1) if elapsed > 0 else 0
+    tokens_per_sec = round(total_tokens / elapsed, 1) if elapsed > 0 else 0
+
+    print(
+        f"[LLM_BATCH] Done: {successful}/{len(items)} ok, "
+        f"{elapsed:.1f}s, {items_per_min} items/min, "
+        f"{total_tokens} tokens, {tokens_per_sec} tok/s"
+    )
 
     return {
         "results": results,
@@ -116,4 +128,9 @@ def generate_batch(
         "successful": successful,
         "failed": failed,
         "total_items": len(items),
+        "items_per_minute": items_per_min,
+        "total_tokens": total_tokens,
+        "tokens_per_second": tokens_per_sec,
     }
+
+
