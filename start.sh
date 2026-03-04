@@ -52,7 +52,19 @@ done
 echo "Available models:"
 ollama list
 
-# 4. Start worker (Serverless handler or Pod HTTP server)
+# 4. Warmup: pre-load default model into VRAM
+# No Serverless, o Runpod cobra por segundo de execução do worker.
+# Se o modelo carrega durante o boot (antes do handler aceitar requests),
+# o custo de warmup é fixo e a primeira request real responde rápido.
+# No Pod, simplesmente acelera a primeira request.
+DEFAULT_MODEL=${DEFAULT_MODEL:-llama3.1:8b}
+echo "Warming up model: $DEFAULT_MODEL ..."
+curl -s http://localhost:11434/api/generate \
+    -d "{\"model\":\"$DEFAULT_MODEL\",\"prompt\":\"hi\",\"stream\":false,\"options\":{\"num_predict\":1}}" \
+    > /dev/null 2>&1
+echo "Model $DEFAULT_MODEL loaded into VRAM."
+
+# 5. Start worker (Serverless handler or Pod HTTP server)
 if [ "$POD_MODE" = "1" ]; then
     echo "Starting Pod HTTP server on port ${POD_SERVER_PORT:-8000}..."
     python pod_server.py
