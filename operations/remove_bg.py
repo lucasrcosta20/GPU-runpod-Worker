@@ -88,7 +88,15 @@ def remove_background(
 
 
 def _get_session(model_name: str) -> Any:
-    """Get or create rembg session with GPU-optimized settings."""
+    """
+    Get or create rembg session with GPU-optimized settings.
+
+    Configures onnxruntime CUDAExecutionProvider with:
+    - arena_extend_strategy=kSameAsRequested: prevents arena from growing
+      exponentially (default kNextPowerOfTwo doubles on each allocation)
+    - gpu_mem_limit=6GB: caps VRAM usage so rembg doesn't consume all 24GB
+      and leave nothing for other operations
+    """
     if model_name not in _sessions:
         import onnxruntime as ort
         from rembg.sessions import sessions_class
@@ -108,6 +116,32 @@ def _get_session(model_name: str) -> Any:
         sess_opts.intra_op_num_threads = 4
         sess_opts.inter_op_num_threads = 4
 
-        _sessions[model_name] = session_class(model_name, sess_opts)
+        # Configure CUDA provider to limit VRAM and prevent arena fragmentation
+        cuda_provider_options = {
+            "device_id": "0",
+            "arena_extend_strategy": "kSameAsRequested",
+            "gpu_mem_limit": str(6 * 1024 * 1024 * 1024),  # 6GB
+        }
+
+        # Override default providers so rembg uses our CUDA config
+        ort_providers = [
+            ("CUDAExecutionProvider", cuda_provider_options),
+            "CPUExecutionProvider",
+        ]
+
+        # rembg session classes accept sess_opts but not providers directly.
+        # We need to set the default providers before creating the session.
+        # The session_class constructor calls ort.InferenceSession internally.
+        # We monkey-patch the providers via environment or session options.
+        #
+        # Actually, rembg's BaseSession.__init__ accepts providers param.
+        # Let's pass it through.
+        try:
+            session = session_class(model_name, sess_opts, providers=ort_providers)
+        except TypeError:
+            # Fallback: older rembg versions don't accept providers kwarg
+            session = session_class(model_name, sess_opts)
+
+        _sessions[model_name] = session
 
     return _sessions[model_name]

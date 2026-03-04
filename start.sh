@@ -48,7 +48,7 @@ fi
 export OLLAMA_NUM_PARALLEL=$PARALLEL
 export OLLAMA_MAX_LOADED_MODELS=1
 export OLLAMA_FLASH_ATTENTION=true
-export OLLAMA_KEEP_ALIVE=24h
+export OLLAMA_KEEP_ALIVE=5m
 
 # Force Python to flush stdout/stderr immediately (so prints appear in Runpod logs)
 export PYTHONUNBUFFERED=1
@@ -81,20 +81,11 @@ echo "Available models:"
 ollama list
 
 # 4. Warmup: pre-load default model into VRAM
-# No Serverless, o Runpod cobra por segundo de execução do worker.
-# Se o modelo carrega durante o boot (antes do handler aceitar requests),
-# o custo de warmup é fixo e a primeira request real responde rápido.
-# No Pod, simplesmente acelera a primeira request.
+# Skipped — with KEEP_ALIVE=5m the model loads on first LLM request
+# and unloads after 5min idle. This avoids VRAM contention with
+# rembg/upscale operations that need the full 24GB.
 DEFAULT_MODEL=${DEFAULT_MODEL:-llama3.1:8b}
-echo "Warming up model: $DEFAULT_MODEL ..."
-curl -s http://localhost:11434/api/generate \
-    -d "{\"model\":\"$DEFAULT_MODEL\",\"prompt\":\"hi\",\"stream\":false,\"options\":{\"num_predict\":1}}" \
-    > /dev/null 2>&1
-echo "Model $DEFAULT_MODEL loaded into VRAM."
-
-# Unload default model to free VRAM for the model that will actually be used
-# (OLLAMA_MAX_LOADED_MODELS=1 means only 1 model in VRAM at a time)
-# The warmup ensures Ollama runners are initialized; actual model loads on first real request.
+echo "Model $DEFAULT_MODEL will load on first LLM request (KEEP_ALIVE=5m)"
 
 # 5. Start worker (Serverless handler or Pod HTTP server)
 if [ "$POD_MODE" = "1" ]; then
