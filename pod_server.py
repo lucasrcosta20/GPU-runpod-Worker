@@ -22,6 +22,7 @@ from flask import Flask, request, jsonify
 from handler import handler as worker_handler
 
 app = Flask(__name__)
+app.url_map.strict_slashes = False
 
 
 @app.route("/run", methods=["POST"])
@@ -57,6 +58,12 @@ def health():
         return jsonify(result)
     except Exception as e:
         return jsonify({"error": f"Health check failed: {str(e)[:500]}"}), 500
+
+
+@app.route("/", methods=["GET"])
+def index():
+    """Root endpoint — confirms server is running."""
+    return jsonify({"status": "ok", "service": "gpu-worker-pod", "endpoints": ["/run", "/health"]})
 
 
 if __name__ == "__main__":
