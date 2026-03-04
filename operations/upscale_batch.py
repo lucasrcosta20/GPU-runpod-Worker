@@ -1,17 +1,20 @@
 """
-Upscale batch operation — parallel Real-ESRGAN via spandrel + PyTorch CUDA.
+Upscale batch operation — sequential Real-ESRGAN via spandrel + PyTorch CUDA.
 
-Receives a list of images, processes them concurrently using
-ThreadPoolExecutor. Returns results in the same order.
+Processes images SEQUENTIALLY to:
+1. Avoid VRAM OOM from multiple concurrent PyTorch inferences
+2. Force gc.collect() + torch.cuda.empty_cache() between images
+3. Share single model load in VRAM
 
-Note: GPU VRAM is shared across threads. max_parallel should be
-conservative (2-3) to avoid OOM on large images.
+Ollama model is unloaded once at the start of the batch.
 """
 
+import gc
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Dict, List, Optional
 
+from operations.gpu_info import get_gpu_name
+from operations.ollama_vram import ollama_vram_free
 from operations.upscale import upscale as upscale_single
 
 
@@ -21,26 +24,24 @@ def upscale_batch(
     denoise_strength: float = 0.0,
     sharpen_amount: float = 0.2,
     sharpen_radius: float = 1.0,
-    max_parallel: int = 2,
+    max_parallel: int = 2,  # ignored — always sequential for VRAM safety
 ) -> Dict[str, Any]:
     """
-    Upscale multiple images in parallel.
+    Upscale multiple images sequentially.
 
-    Each item must have 'data' (base64) and 'filename'.
-    Optional per-item overrides: 'upscale_factor', 'denoise_strength',
-    'sharpen_amount', 'sharpen_radius'.
+    Unloads Ollama from VRAM once, processes all images with
+    gc.collect() between each, then Ollama auto-reloads on next LLM request.
 
     Args:
         items: List of dicts with 'data' and 'filename'.
-        upscale_factor: Default upscale factor (shared).
+        upscale_factor: Default upscale factor.
         denoise_strength: Default denoising strength.
         sharpen_amount: Default sharpening intensity.
         sharpen_radius: Default sharpening radius.
-        max_parallel: Max concurrent threads (conservative for VRAM).
+        max_parallel: Ignored (kept for API compat). Always sequential.
 
     Returns:
-        Dict with 'results' (list in same order), 'total_time_seconds',
-        'successful', 'failed'.
+        Dict with 'results', 'total_time_seconds', 'successful', 'failed'.
     """
     start = time.time()
 
@@ -53,50 +54,72 @@ def upscale_batch(
             "total_items": 0,
         }
 
-    results: List[Optional[Dict[str, Any]]] = [None] * len(items)
-
-    def _process_item(index: int, item: Dict[str, Any]) -> tuple:
-        """Process a single item and return (index, result_dict)."""
-        data = item.get("data", "")
-        filename = item.get("filename", f"image_{index}.png")
-
-        if not data:
-            return index, {
-                "filename": filename,
-                "data": None,
-                "success": False,
-                "error": "Empty image data",
-                "processing_time_seconds": 0,
-            }
-
-        result = upscale_single(
-            image_data=data,
-            filename=filename,
-            upscale_factor=item.get("upscale_factor", upscale_factor),
-            denoise_strength=item.get("denoise_strength", denoise_strength),
-            sharpen_amount=item.get("sharpen_amount", sharpen_amount),
-            sharpen_radius=item.get("sharpen_radius", sharpen_radius),
-        )
-        return index, result
-
+    results: List[Dict[str, Any]] = []
     successful = 0
     failed = 0
 
-    with ThreadPoolExecutor(max_workers=max_parallel) as executor:
-        futures = {
-            executor.submit(_process_item, i, item): i
-            for i, item in enumerate(items)
-        }
+    print(f"[UPSCALE_BATCH] Starting batch: {len(items)} images, factor={upscale_factor}")
 
-        for future in as_completed(futures):
-            index, result = future.result()
-            results[index] = result
+    # Note: upscale_single already calls ollama_vram_free() internally,
+    # but for batch we want to unload ONCE and keep it unloaded for all images.
+    # The nested ollama_vram_free() inside upscale_single will be a no-op
+    # since the model is already unloaded.
+    with ollama_vram_free():
+        for i, item in enumerate(items):
+            data = item.get("data", "")
+            filename = item.get("filename", f"image_{i}.png")
+
+            if not data:
+                results.append({
+                    "filename": filename,
+                    "data": None,
+                    "success": False,
+                    "error": "Empty image data",
+                    "processing_time_seconds": 0,
+                })
+                failed += 1
+                continue
+
+            result = upscale_single(
+                image_data=data,
+                filename=filename,
+                upscale_factor=item.get("upscale_factor", upscale_factor),
+                denoise_strength=item.get("denoise_strength", denoise_strength),
+                sharpen_amount=item.get("sharpen_amount", sharpen_amount),
+                sharpen_radius=item.get("sharpen_radius", sharpen_radius),
+            )
+            results.append(result)
+
             if result.get("success"):
                 successful += 1
             else:
                 failed += 1
 
+            # Force cleanup between images
+            gc.collect()
+            try:
+                import torch
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+            except ImportError:
+                pass
+
+            # Progress log every 5 images
+            if (i + 1) % 5 == 0 or (i + 1) == len(items):
+                elapsed_so_far = time.time() - start
+                avg_per_image = elapsed_so_far / (i + 1)
+                remaining = avg_per_image * (len(items) - i - 1)
+                print(
+                    f"[UPSCALE_BATCH] Progress: {i + 1}/{len(items)} "
+                    f"({successful} ok, {failed} fail) "
+                    f"avg={avg_per_image:.1f}s/img, ETA={remaining:.0f}s"
+                )
+
     elapsed = time.time() - start
+    print(
+        f"[UPSCALE_BATCH] Complete: {len(items)} images in {elapsed:.1f}s "
+        f"({successful} ok, {failed} fail)"
+    )
 
     return {
         "results": results,

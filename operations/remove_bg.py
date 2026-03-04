@@ -2,6 +2,9 @@
 Background removal operation — rembg with GPU (onnxruntime-gpu).
 
 Receives 1 image in base64, returns 1 image (PNG transparent) in base64.
+
+VRAM strategy: Ollama model is unloaded before first rembg inference
+to free ~13GB VRAM for onnxruntime CUDAExecutionProvider.
 """
 
 import base64
@@ -13,6 +16,7 @@ from typing import Any, Dict
 from PIL import Image
 
 from operations.gpu_info import get_gpu_name
+from operations.ollama_vram import ollama_vram_free
 
 
 # Cache sessions to avoid reloading models per request
@@ -27,10 +31,12 @@ def remove_background(
     """
     Remove background from a single image.
 
+    Unloads Ollama model from VRAM first to make room for onnxruntime.
+
     Args:
         image_data: Base64-encoded image.
         filename: Original filename (for response).
-        bg_model: rembg model name (e.g. 'birefnet-general', 'isnet-general-use', 'u2net').
+        bg_model: rembg model name.
 
     Returns:
         Dict with 'filename', 'data' (base64 PNG), 'success', 'error',
@@ -45,11 +51,10 @@ def remove_background(
         raw = base64.b64decode(image_data)
         image = Image.open(io.BytesIO(raw))
 
-        # Get or create session
-        session = _get_session(bg_model)
-
-        # Remove background
-        result = remove(image, session=session)
+        # Free VRAM from Ollama, then run rembg on GPU
+        with ollama_vram_free():
+            session = _get_session(bg_model)
+            result = remove(image, session=session)
 
         # Encode result as PNG (transparent)
         buf = io.BytesIO()
@@ -57,7 +62,7 @@ def remove_background(
         result_b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
 
         # Cleanup
-        del image, result, raw
+        del image, result, raw, buf
         gc.collect()
 
         elapsed = time.time() - start
@@ -99,7 +104,6 @@ def _get_session(model_name: str) -> Any:
 
         # GPU-optimized session options
         sess_opts = ort.SessionOptions()
-        # On GPU we can be more generous with memory
         sess_opts.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
         sess_opts.intra_op_num_threads = 4
         sess_opts.inter_op_num_threads = 4

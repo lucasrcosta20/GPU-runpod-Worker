@@ -4,6 +4,9 @@ Upscale operation — Real-ESRGAN via spandrel + PyTorch CUDA.
 Receives 1 image in base64, returns 1 upscaled image in base64.
 Pipeline: sRGB normalize → Denoise (optional) → Upscale → Sharpen (optional)
 Replicates the exact same pipeline as ia-cadastro's QualityEnhancer.
+
+VRAM strategy: Ollama model is unloaded before PyTorch inference
+to free ~13GB VRAM for Real-ESRGAN.
 """
 
 import base64
@@ -17,6 +20,7 @@ import numpy as np
 from PIL import Image, ImageCms
 
 from operations.gpu_info import get_gpu_name
+from operations.ollama_vram import ollama_vram_free
 
 
 # Model cache
@@ -75,8 +79,9 @@ def upscale(
         if denoise_strength > 0:
             image = _denoise(image, denoise_strength)
 
-        # 3. Upscale
-        image = _upscale(image, upscale_factor)
+        # 3. Upscale (free Ollama VRAM first for PyTorch)
+        with ollama_vram_free():
+            image = _upscale(image, upscale_factor)
 
         # 4. Sharpen (if enabled)
         if sharpen_amount > 0:
@@ -92,7 +97,7 @@ def upscale(
 
         result_b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
 
-        del image, raw
+        del image, raw, buf
         gc.collect()
 
         elapsed = time.time() - start
