@@ -50,6 +50,9 @@ export OLLAMA_MAX_LOADED_MODELS=1
 export OLLAMA_FLASH_ATTENTION=true
 export OLLAMA_KEEP_ALIVE=24h
 
+# Force Python to flush stdout/stderr immediately (so prints appear in Runpod logs)
+export PYTHONUNBUFFERED=1
+
 # 2. Start Ollama in background
 echo "Starting Ollama (OLLAMA_NUM_PARALLEL=$OLLAMA_NUM_PARALLEL)..."
 ollama serve &
