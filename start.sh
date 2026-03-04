@@ -64,6 +64,10 @@ curl -s http://localhost:11434/api/generate \
     > /dev/null 2>&1
 echo "Model $DEFAULT_MODEL loaded into VRAM."
 
+# Unload default model to free VRAM for the model that will actually be used
+# (OLLAMA_MAX_LOADED_MODELS=1 means only 1 model in VRAM at a time)
+# The warmup ensures Ollama runners are initialized; actual model loads on first real request.
+
 # 5. Start worker (Serverless handler or Pod HTTP server)
 if [ "$POD_MODE" = "1" ]; then
     echo "Starting Pod HTTP server on port ${POD_SERVER_PORT:-8000}..."
