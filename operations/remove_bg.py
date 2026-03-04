@@ -94,8 +94,9 @@ def _get_session(model_name: str) -> Any:
     Configures onnxruntime CUDAExecutionProvider with:
     - arena_extend_strategy=kSameAsRequested: prevents arena from growing
       exponentially (default kNextPowerOfTwo doubles on each allocation)
-    - gpu_mem_limit=6GB: caps VRAM usage so rembg doesn't consume all 24GB
-      and leave nothing for other operations
+    - gpu_mem_limit=16GB: Ollama is unloaded from VRAM before rembg runs
+      (ollama_vram_free + KEEP_ALIVE=5m), so full 24GB is available.
+      BiRefNet needs ~8-10GB for large images (atrous_conv tensors 800MB+)
     """
     if model_name not in _sessions:
         import onnxruntime as ort
@@ -120,7 +121,7 @@ def _get_session(model_name: str) -> Any:
         cuda_provider_options = {
             "device_id": "0",
             "arena_extend_strategy": "kSameAsRequested",
-            "gpu_mem_limit": str(6 * 1024 * 1024 * 1024),  # 6GB
+            "gpu_mem_limit": str(16 * 1024 * 1024 * 1024),  # 16GB
         }
 
         # Override default providers so rembg uses our CUDA config
