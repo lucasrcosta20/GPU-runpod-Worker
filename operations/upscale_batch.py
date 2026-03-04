@@ -15,7 +15,7 @@ from typing import Any, Dict, List
 
 from operations.gpu_info import get_gpu_name
 from operations.ollama_vram import ollama_vram_free
-from operations.upscale import upscale as upscale_single
+from operations.upscale import upscale as upscale_single, clear_models
 
 
 def upscale_batch(
@@ -120,6 +120,9 @@ def upscale_batch(
         f"[UPSCALE_BATCH] Complete: {len(items)} images in {elapsed:.1f}s "
         f"({successful} ok, {failed} fail)"
     )
+
+    # Free VRAM: clear PyTorch models so Ollama can use full GPU
+    clear_models()
 
     return {
         "results": results,

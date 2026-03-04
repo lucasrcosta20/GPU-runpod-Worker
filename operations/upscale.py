@@ -27,6 +27,23 @@ from operations.ollama_vram import ollama_vram_free
 _models: Dict[int, Any] = {}
 _device = None
 
+
+def clear_models():
+    """
+    Clear cached Real-ESRGAN models to free VRAM.
+
+    Called after batch/single operations complete so PyTorch
+    releases GPU memory for Ollama to use on next LLM request.
+    """
+    global _models, _device
+    if _models:
+        print(f"[UPSCALE] Clearing {len(_models)} cached model(s) to free VRAM")
+        _models.clear()
+        import torch
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        gc.collect()
+
 MODELS_DIR = os.environ.get("MODELS_DIR", "/app/models")
 
 MODEL_NAMES = {
@@ -99,6 +116,9 @@ def upscale(
 
         del image, raw, buf
         gc.collect()
+
+        # Free VRAM: clear PyTorch models so Ollama can use full GPU
+        clear_models()
 
         elapsed = time.time() - start
         return {

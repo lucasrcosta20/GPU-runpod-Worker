@@ -23,6 +23,20 @@ from operations.ollama_vram import ollama_vram_free
 _sessions: Dict[str, Any] = {}
 
 
+def clear_sessions():
+    """
+    Clear cached rembg sessions to free VRAM.
+
+    Called after batch/single operations complete so onnxruntime
+    releases GPU memory for Ollama to use on next LLM request.
+    """
+    global _sessions
+    if _sessions:
+        print(f"[REMBG] Clearing {len(_sessions)} cached session(s) to free VRAM")
+        _sessions.clear()
+        gc.collect()
+
+
 def remove_background(
     image_data: str,
     filename: str = "image.png",
@@ -64,6 +78,9 @@ def remove_background(
         # Cleanup
         del image, result, raw, buf
         gc.collect()
+
+        # Free VRAM: clear onnxruntime session so Ollama can use full GPU
+        clear_sessions()
 
         elapsed = time.time() - start
         return {

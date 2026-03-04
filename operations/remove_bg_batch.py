@@ -20,7 +20,7 @@ from PIL import Image
 
 from operations.gpu_info import get_gpu_name
 from operations.ollama_vram import ollama_vram_free
-from operations.remove_bg import _get_session
+from operations.remove_bg import _get_session, clear_sessions
 
 
 def remove_background_batch(
@@ -146,6 +146,9 @@ def remove_background_batch(
         f"[REMBG_BATCH] Complete: {len(items)} images in {elapsed:.1f}s "
         f"({successful} ok, {failed} fail)"
     )
+
+    # Free VRAM: clear onnxruntime session so Ollama can use full GPU
+    clear_sessions()
 
     return {
         "results": results,
