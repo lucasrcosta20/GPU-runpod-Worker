@@ -7,20 +7,39 @@ export PATH=$PATH:/usr/local/bin
 echo "=== GPU Worker Starting ==="
 
 # 1. Auto-detect VRAM and configure Ollama parallelism BEFORE starting
-# Formula: (VRAM_GB - model_size - overhead) / kv_cache_per_slot
-# llama3.1:8b ~ 5GB model, ~5GB KV cache per parallel slot, 2GB overhead
+#
+# CRITICAL: The old formula was wrong — it didn't account for KV cache scaling
+# with context_length × num_parallel. With NUM_PARALLEL=3 and ctx=32768:
+#   KV cache = 3 × 4GB = 12GB, model = 4.6GB → 16.6GB (offloads to CPU!)
+#
+# Correct formula considers:
+#   - Model weights (Q4_K_M): ~5GB for 8B model
+#   - KV cache per parallel slot (ctx=32768, GQA): ~4GB per slot
+#   - Compute graph overhead: ~1GB
+#   - Reserve for other GPU workloads (rembg, upscale): 2GB
+#
+# Priority: ALL model weights on GPU > more parallelism
+# CPU offload kills performance — 1 parallel slot fully on GPU is faster
+# than 3 slots with half the model on CPU.
+#
 VRAM_MB=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>/dev/null | head -1)
 if [ -n "$VRAM_MB" ]; then
     VRAM_GB=$((VRAM_MB / 1024))
-    MODEL_GB=5
-    OVERHEAD_GB=2
-    KV_PER_SLOT_GB=5
-    AVAILABLE=$((VRAM_GB - MODEL_GB - OVERHEAD_GB))
-    PARALLEL=$((AVAILABLE / KV_PER_SLOT_GB))
-    # Clamp between 1 and 8
+    MODEL_GB=5          # llama3.1:8b Q4_K_M weights
+    OVERHEAD_GB=3       # compute graph + buffers + Ollama internal overhead
+    RESERVE_GB=0        # no reserve needed — Ollama manages its own memory
+    KV_PER_SLOT_GB=6    # KV cache per slot: real-world ~4GB KV + 2GB compute/buffers per slot
+
+    # Total Ollama needs = MODEL_GB + OVERHEAD_GB + (PARALLEL × KV_PER_SLOT_GB)
+    # Must fit entirely in VRAM to avoid CPU offload (which kills performance)
+    AVAILABLE_FOR_KV=$((VRAM_GB - MODEL_GB - OVERHEAD_GB - RESERVE_GB))
+    PARALLEL=$((AVAILABLE_FOR_KV / KV_PER_SLOT_GB))
+
+    # Clamp between 1 and 4
     [ "$PARALLEL" -lt 1 ] && PARALLEL=1
-    [ "$PARALLEL" -gt 8 ] && PARALLEL=8
-    echo "Detected ${VRAM_GB}GB VRAM -> OLLAMA_NUM_PARALLEL=${PARALLEL}"
+    [ "$PARALLEL" -gt 4 ] && PARALLEL=4
+
+    echo "Detected ${VRAM_GB}GB VRAM -> OLLAMA_NUM_PARALLEL=${PARALLEL} (${AVAILABLE_FOR_KV}GB available for KV cache)"
 else
     echo "WARNING: nvidia-smi not found, defaulting to OLLAMA_NUM_PARALLEL=1"
     PARALLEL=1
@@ -28,6 +47,8 @@ fi
 
 export OLLAMA_NUM_PARALLEL=$PARALLEL
 export OLLAMA_MAX_LOADED_MODELS=1
+export OLLAMA_FLASH_ATTENTION=true
+export OLLAMA_KEEP_ALIVE=24h
 
 # 2. Start Ollama in background
 echo "Starting Ollama (OLLAMA_NUM_PARALLEL=$OLLAMA_NUM_PARALLEL)..."

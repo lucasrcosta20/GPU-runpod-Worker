@@ -12,6 +12,8 @@ All pipeline logic stays in ia-cadastro. This worker only
 executes individual operations.
 """
 
+import os
+
 import runpod
 
 from security.hmac_validator import validate_hmac
@@ -124,7 +126,8 @@ def _handle_llm_batch(data: dict) -> dict:
     temperature = data.get("temperature", 0.7)
     max_tokens = data.get("max_tokens", 2000)
     timeout = data.get("timeout", 300)
-    max_parallel = data.get("max_parallel", 4)
+    default_parallel = int(os.environ.get("OLLAMA_NUM_PARALLEL", "2"))
+    max_parallel = data.get("max_parallel", default_parallel)
 
     return llm_generate_batch(
         items=items,
@@ -230,6 +233,5 @@ def _handle_resize(data: dict) -> dict:
 
 
 # Start Runpod Serverless handler (skip when running as Pod HTTP server)
-import os
 if os.environ.get("POD_MODE") != "1":
     runpod.serverless.start({"handler": handler})
