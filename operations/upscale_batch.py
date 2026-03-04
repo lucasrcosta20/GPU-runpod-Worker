@@ -11,7 +11,7 @@ Ollama model is unloaded once at the start of the batch.
 
 import gc
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from operations.gpu_info import get_gpu_name
 from operations.ollama_vram import ollama_vram_free

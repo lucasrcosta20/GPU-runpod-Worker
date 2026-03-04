@@ -14,16 +14,13 @@ import base64
 import gc
 import io
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from PIL import Image
 
 from operations.gpu_info import get_gpu_name
 from operations.ollama_vram import ollama_vram_free
-
-
-# Shared session cache (same as remove_bg.py)
-_sessions: Dict[str, Any] = {}
+from operations.remove_bg import _get_session
 
 
 def remove_background_batch(
@@ -157,28 +154,3 @@ def remove_background_batch(
         "failed": failed,
         "total_items": len(items),
     }
-
-
-def _get_session(model_name: str) -> Any:
-    """Get or create rembg session with GPU-optimized settings."""
-    if model_name not in _sessions:
-        import onnxruntime as ort
-        from rembg.sessions import sessions_class
-
-        session_class = None
-        for sc in sessions_class:
-            if sc.name() == model_name:
-                session_class = sc
-                break
-
-        if session_class is None:
-            raise ValueError(f"rembg model not found: '{model_name}'")
-
-        sess_opts = ort.SessionOptions()
-        sess_opts.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
-        sess_opts.intra_op_num_threads = 4
-        sess_opts.inter_op_num_threads = 4
-
-        _sessions[model_name] = session_class(model_name, sess_opts)
-
-    return _sessions[model_name]
