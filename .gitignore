@@ -34,6 +34,10 @@ models/
 .env.local
 .env.production
 
+# Logs
+logs*.txt
+*.log
+
 # Docker
 *.tar
 *.gz
