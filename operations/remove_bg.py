@@ -112,7 +112,7 @@ def _get_session(model_name: str) -> Any:
     - arena_extend_strategy=kSameAsRequested: prevents arena from growing
       exponentially (default kNextPowerOfTwo doubles on each allocation)
     - gpu_mem_limit=16GB: Ollama is unloaded from VRAM before rembg runs
-      (ollama_vram_free + KEEP_ALIVE=5m), so full 24GB is available.
+      (ollama_vram_free + hold_vram), so full 24GB is available.
       BiRefNet needs ~8-10GB for large images (atrous_conv tensors 800MB+)
     """
     if model_name not in _sessions:

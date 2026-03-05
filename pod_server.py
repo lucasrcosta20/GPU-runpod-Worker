@@ -249,6 +249,38 @@ def cancel(job_id: str):
 
 # ── Health & Root ────────────────────────────────────────────────────
 
+@app.route("/vram/hold", methods=["POST"])
+def vram_hold():
+    """
+    Hold VRAM free for a multi-chunk image job.
+
+    Call once before sending image batch chunks. Ollama model is
+    unloaded and stays unloaded until /vram/release is called.
+    This avoids per-chunk unload overhead.
+
+    Returns:
+        {"held": true}
+    """
+    from operations.ollama_vram import hold_vram
+    success = hold_vram()
+    return jsonify({"held": success})
+
+
+@app.route("/vram/release", methods=["POST"])
+def vram_release():
+    """
+    Release VRAM hold after image job completes/fails/cancels.
+
+    Ollama model will auto-reload on the next LLM request.
+
+    Returns:
+        {"released": true}
+    """
+    from operations.ollama_vram import release_vram
+    release_vram()
+    return jsonify({"released": True})
+
+
 @app.route("/health", methods=["GET"])
 def health():
     """Quick health check — runs the health operation."""

@@ -5,11 +5,16 @@ When rembg (onnxruntime) or upscale (PyTorch) need VRAM, the Ollama
 model must be temporarily unloaded. After the operation completes,
 the model reloads automatically on the next LLM request.
 
-Usage:
+Two modes of operation:
+
+1. Per-request (context manager):
     with ollama_vram_free():
-        # VRAM is free here — run rembg/upscale
-        ...
-    # Model will auto-reload on next LLM call
+        run_rembg(...)
+
+2. Job-level hold (for multi-chunk image jobs):
+    hold_vram()    # Called once at job start — unloads Ollama
+    # ... multiple chunk requests run without re-checking ...
+    release_vram() # Called at job end — allows Ollama to reload
 """
 
 import os
@@ -27,6 +32,10 @@ DEFAULT_MODEL = os.environ.get("DEFAULT_MODEL", "llama3.1:8b")
 # Protected by lock since pod_server is threaded.
 _lock = threading.Lock()
 _active_count = 0
+
+# Job-level VRAM hold: when > 0, Ollama stays unloaded across
+# multiple HTTP requests (avoids per-chunk unload/check overhead).
+_hold_count = 0
 
 
 def _is_model_loaded(model: str = DEFAULT_MODEL, timeout: int = 5) -> bool:
@@ -90,18 +99,74 @@ def unload_model(model: str = DEFAULT_MODEL, timeout: int = 30) -> bool:
         return False
 
 
+def hold_vram(model: str = DEFAULT_MODEL) -> bool:
+    """
+    Hold VRAM free for the duration of a multi-chunk image job.
+
+    Called once at job start. Unloads Ollama model and increments
+    the hold counter. While held, ollama_vram_free() is a no-op
+    (model is already unloaded and won't reload between chunks).
+
+    Thread-safe: multiple concurrent holds are reference-counted.
+
+    Args:
+        model: Model name to unload.
+
+    Returns:
+        True if VRAM was freed (or already held).
+    """
+    global _hold_count
+
+    with _lock:
+        _hold_count += 1
+        is_first = (_hold_count == 1)
+
+    if is_first:
+        print("[VRAM] Hold: unloading Ollama for multi-chunk job")
+        return unload_model(model)
+    else:
+        print(f"[VRAM] Hold: already held (count={_hold_count})")
+        return True
+
+
+def release_vram() -> None:
+    """
+    Release VRAM hold after a multi-chunk image job completes.
+
+    Decrements the hold counter. When it reaches 0, Ollama is
+    free to reload on the next LLM request.
+
+    Should be called when the job finishes, fails, or is cancelled.
+    """
+    global _hold_count
+
+    with _lock:
+        _hold_count = max(0, _hold_count - 1)
+        is_last = (_hold_count == 0)
+
+    if is_last:
+        print("[VRAM] Release: Ollama free to reload on next LLM request")
+    else:
+        print(f"[VRAM] Release: still held (count={_hold_count})")
+
+
+def is_vram_held() -> bool:
+    """Check if VRAM is currently held by a job."""
+    with _lock:
+        return _hold_count > 0
+
+
 @contextmanager
 def ollama_vram_free(model: str = DEFAULT_MODEL):
     """
     Context manager that frees VRAM by unloading Ollama model.
 
-    Reference-counted: nested calls (upscale_batch → upscale_single)
-    and concurrent requests skip redundant unload cycles.
+    If VRAM is already held (via hold_vram), this is a no-op —
+    the model is already unloaded and will stay unloaded until
+    release_vram() is called.
 
-    Between consecutive batch chunks (separate HTTP requests), checks
-    /api/ps to see if model is actually loaded before doing the
-    expensive unload + sleep(2) cycle. If model is already gone
-    (common between chunks), the unload is a fast no-op.
+    Reference-counted: nested calls (upscale_batch → upscale_single)
+    skip redundant unload cycles.
 
     Usage:
         with ollama_vram_free():
@@ -109,6 +174,12 @@ def ollama_vram_free(model: str = DEFAULT_MODEL):
             run_rembg(...)
     """
     global _active_count
+
+    # If VRAM is held by a job, skip unload entirely
+    if is_vram_held():
+        print("[VRAM] Held by job, skipping per-request unload")
+        yield
+        return
 
     with _lock:
         _active_count += 1

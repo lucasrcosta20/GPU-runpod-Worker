@@ -1,12 +1,13 @@
-# GPU Worker — Runpod Serverless
-# Base: Runpod official PyTorch image (Python 3.10 + CUDA 12.1 + PyTorch 2.2 pre-installed)
+# GPU Worker — Runpod Serverless / Pod
+# Base: Runpod official PyTorch image (Python 3.11 + CUDA 12.4 + PyTorch 2.4 pre-installed)
+# Same image used by the Pod template for consistency.
 # Includes: Ollama + LLM models + rembg + Real-ESRGAN + runpod SDK
 # Final image size: ~20-25GB (models baked in)
 #
 # Reference: https://docs.runpod.io/serverless/workers/create-dockerfile
 # Base image: https://hub.docker.com/r/runpod/pytorch
 
-FROM runpod/pytorch:2.2.0-py3.10-cuda12.1.1-devel-ubuntu22.04
+FROM runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1

@@ -22,6 +22,7 @@ def generate(
     max_tokens: int = 2000,
     timeout: int = DEFAULT_TIMEOUT,
     images: Optional[List[str]] = None,
+    num_ctx: Optional[int] = None,
 ) -> Dict[str, Any]:
     """
     Generate text via Ollama localhost.
@@ -34,6 +35,8 @@ def generate(
         max_tokens: Maximum tokens to generate.
         timeout: Request timeout in seconds.
         images: Optional list of base64-encoded images (multimodal).
+        num_ctx: Context window size. If None, auto-selects:
+                 2048 for text-only, 4096 for multimodal.
 
     Returns:
         Dict with 'text', 'model', 'tokens_generated', 'processing_time_seconds'.
@@ -43,6 +46,10 @@ def generate(
     """
     start = time.time()
 
+    # Resolve num_ctx: explicit > auto-detect based on images
+    if num_ctx is None:
+        num_ctx = 4096 if images else 2048
+
     payload = {
         "model": model,
         "prompt": prompt,
@@ -50,6 +57,7 @@ def generate(
         "options": {
             "temperature": temperature,
             "num_predict": max_tokens,
+            "num_ctx": num_ctx,
         },
     }
 
@@ -58,8 +66,6 @@ def generate(
 
     if images:
         payload["images"] = images
-        # Multimodal precisa de contexto maior para processar imagens + texto
-        payload["options"]["num_ctx"] = 8192
 
     resp = requests.post(
         f"{OLLAMA_URL}/api/generate",

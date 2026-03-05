@@ -9,14 +9,13 @@ echo "=== GPU Worker Starting ==="
 # 1. Auto-detect VRAM and configure Ollama parallelism BEFORE starting
 #
 # CRITICAL: The old formula was wrong — it didn't account for KV cache scaling
-# with context_length × num_parallel. With NUM_PARALLEL=3 and ctx=32768:
-#   KV cache = 3 × 4GB = 12GB, model = 4.6GB → 16.6GB (offloads to CPU!)
+# with context_length × num_parallel. With explicit num_ctx=2048 (set in llm.py),
+# KV cache per slot is very small (~0.6GB vs ~4GB with default 32768).
 #
 # Correct formula considers:
 #   - Model weights (Q4_K_M): ~5GB for 8B model
-#   - KV cache per parallel slot (ctx=32768, GQA): ~4GB per slot
-#   - Compute graph overhead: ~1GB
-#   - Reserve for other GPU workloads (rembg, upscale): 2GB
+#   - KV cache per parallel slot (ctx=2048): ~0.6GB per slot
+#   - Compute graph overhead + buffers: ~3GB
 #
 # Priority: ALL model weights on GPU > more parallelism
 # CPU offload kills performance — 1 parallel slot fully on GPU is faster
@@ -28,16 +27,20 @@ if [ -n "$VRAM_MB" ]; then
     MODEL_GB=5          # llama3.1:8b Q4_K_M weights
     OVERHEAD_GB=3       # compute graph + buffers + Ollama internal overhead
     RESERVE_GB=0        # no reserve needed — Ollama manages its own memory
-    KV_PER_SLOT_GB=6    # KV cache per slot: real-world ~4GB KV + 2GB compute/buffers per slot
+    KV_PER_SLOT_GB=1    # KV cache per slot with num_ctx=2048: ~0.6GB KV + ~0.4GB buffers
 
-    # Total Ollama needs = MODEL_GB + OVERHEAD_GB + (PARALLEL × KV_PER_SLOT_GB)
-    # Must fit entirely in VRAM to avoid CPU offload (which kills performance)
+    # With num_ctx=2048 (set explicitly in llm.py), KV cache per slot is very
+    # small compared to the Ollama default (32768). This allows many parallel
+    # slots while keeping all model weights on GPU.
+    #
+    # A5000 24GB example: (24 - 5 - 3) / 1 = 16 → clamped to 6
+    # Total VRAM: 5 (model) + 3 (overhead) + 6×1 (KV) = 14GB, 10GB headroom
     AVAILABLE_FOR_KV=$((VRAM_GB - MODEL_GB - OVERHEAD_GB - RESERVE_GB))
     PARALLEL=$((AVAILABLE_FOR_KV / KV_PER_SLOT_GB))
 
-    # Clamp between 1 and 4
+    # Clamp between 1 and 6
     [ "$PARALLEL" -lt 1 ] && PARALLEL=1
-    [ "$PARALLEL" -gt 4 ] && PARALLEL=4
+    [ "$PARALLEL" -gt 6 ] && PARALLEL=6
 
     echo "Detected ${VRAM_GB}GB VRAM -> OLLAMA_NUM_PARALLEL=${PARALLEL} (${AVAILABLE_FOR_KV}GB available for KV cache)"
 else
@@ -48,7 +51,7 @@ fi
 export OLLAMA_NUM_PARALLEL=$PARALLEL
 export OLLAMA_MAX_LOADED_MODELS=1
 export OLLAMA_FLASH_ATTENTION=true
-export OLLAMA_KEEP_ALIVE=5m
+export OLLAMA_KEEP_ALIVE=30m
 
 # Force Python to flush stdout/stderr immediately (so prints appear in Runpod logs)
 export PYTHONUNBUFFERED=1
@@ -81,11 +84,11 @@ echo "Available models:"
 ollama list
 
 # 4. Warmup: pre-load default model into VRAM
-# Skipped — with KEEP_ALIVE=5m the model loads on first LLM request
-# and unloads after 5min idle. This avoids VRAM contention with
-# rembg/upscale operations that need the full 24GB.
+# Skipped — with KEEP_ALIVE=30m the model loads on first LLM request
+# and unloads after 30min idle. Image operations (rembg, upscale)
+# use hold_vram/release_vram for explicit VRAM management.
 DEFAULT_MODEL=${DEFAULT_MODEL:-llama3.1:8b}
-echo "Model $DEFAULT_MODEL will load on first LLM request (KEEP_ALIVE=5m)"
+echo "Model $DEFAULT_MODEL will load on first LLM request (KEEP_ALIVE=30m)"
 
 # 5. Start worker (Serverless handler or Pod HTTP server)
 if [ "$POD_MODE" = "1" ]; then

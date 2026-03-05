@@ -126,6 +126,7 @@ def _handle_llm_batch(data: dict) -> dict:
     temperature = data.get("temperature", 0.7)
     max_tokens = data.get("max_tokens", 2000)
     timeout = data.get("timeout", 300)
+    num_ctx = data.get("num_ctx", 2048)
     default_parallel = int(os.environ.get("OLLAMA_NUM_PARALLEL", "2"))
     max_parallel = data.get("max_parallel", default_parallel)
 
@@ -137,6 +138,7 @@ def _handle_llm_batch(data: dict) -> dict:
         max_tokens=max_tokens,
         timeout=timeout,
         max_parallel=max_parallel,
+        num_ctx=num_ctx,
     )
 
 

@@ -24,6 +24,7 @@ def generate_batch(
     max_tokens: int = 2000,
     timeout: int = 300,
     max_parallel: int = 4,
+    num_ctx: int = 2048,
 ) -> Dict[str, Any]:
     """
     Generate text for multiple prompts in parallel via Ollama.
@@ -39,6 +40,7 @@ def generate_batch(
         max_tokens: Maximum tokens per generation.
         timeout: Timeout per individual generation.
         max_parallel: Max concurrent Ollama requests (should match OLLAMA_NUM_PARALLEL).
+        num_ctx: Context window size (2048 text-only, 4096 multimodal).
 
     Returns:
         Dict with 'results' (list in same order), 'total_time_seconds',
@@ -46,7 +48,7 @@ def generate_batch(
         'total_tokens', 'tokens_per_second'.
     """
     start = time.time()
-    print(f"[LLM_BATCH] Starting batch: {len(items)} items, model={model}, parallel={max_parallel}")
+    print(f"[LLM_BATCH] Starting batch: {len(items)} items, model={model}, parallel={max_parallel}, num_ctx={num_ctx}")
 
     if not items:
         return {
@@ -74,6 +76,9 @@ def generate_batch(
         item_images = item.get("images")
 
         try:
+            # Per-item num_ctx: use batch-level default, but override
+            # to 4096 if item has images (multimodal needs more context)
+            item_num_ctx = 4096 if item_images else num_ctx
             result = generate_single(
                 model=model,
                 prompt=prompt,
@@ -82,6 +87,7 @@ def generate_batch(
                 max_tokens=max_tokens,
                 timeout=timeout,
                 images=item_images,
+                num_ctx=item_num_ctx,
             )
             result["success"] = True
             return index, result
