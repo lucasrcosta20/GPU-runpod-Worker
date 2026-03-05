@@ -58,6 +58,8 @@ def generate(
 
     if images:
         payload["images"] = images
+        # Multimodal precisa de contexto maior para processar imagens + texto
+        payload["options"]["num_ctx"] = 8192
 
     resp = requests.post(
         f"{OLLAMA_URL}/api/generate",
