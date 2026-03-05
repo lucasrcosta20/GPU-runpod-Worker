@@ -12,8 +12,11 @@ import os
 from typing import Optional
 
 
-# Shared secret — must match GPU_HMAC_SECRET on the VPS
+# Shared secret — injected via RunPod environment variables, never hardcoded
 HMAC_SECRET = os.environ.get("HMAC_SECRET", "")
+
+# Explicit opt-in for dev mode (must set HMAC_DEV_BYPASS=1)
+HMAC_DEV_BYPASS = os.environ.get("HMAC_DEV_BYPASS", "") == "1"
 
 
 def validate_hmac(payload: dict, signature: Optional[str]) -> bool:
@@ -26,10 +29,17 @@ def validate_hmac(payload: dict, signature: Optional[str]) -> bool:
 
     Returns:
         True if signature is valid.
+
+    Raises:
+        RuntimeError: If HMAC_SECRET is not configured and dev bypass is off.
     """
     if not HMAC_SECRET:
-        # No secret configured — skip validation (dev mode)
-        return True
+        if HMAC_DEV_BYPASS:
+            return True
+        raise RuntimeError(
+            "HMAC_SECRET not configured. Set HMAC_SECRET env var in RunPod "
+            "or HMAC_DEV_BYPASS=1 for local development."
+        )
 
     if not signature:
         return False
