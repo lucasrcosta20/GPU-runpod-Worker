@@ -65,7 +65,8 @@ export PYTHONUNBUFFERED=1
 
 # cuDNN 9 is bundled with Ollama at a non-standard path.
 # onnxruntime-gpu needs it in LD_LIBRARY_PATH to use CUDAExecutionProvider for rembg.
-export LD_LIBRARY_PATH="/usr/local/lib/ollama/cuda_v13:${LD_LIBRARY_PATH:-}"
+# Include both Ollama's bundled cuDNN and the pip-installed nvidia-cudnn path.
+export LD_LIBRARY_PATH="/usr/local/lib/ollama/mlx_cuda_v13:/usr/local/lib/ollama/cuda_v13:${LD_LIBRARY_PATH:-}"
 
 # 2. Start Ollama in background
 echo "Starting Ollama (OLLAMA_NUM_PARALLEL=$OLLAMA_NUM_PARALLEL)..."
