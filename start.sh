@@ -60,6 +60,9 @@ export OLLAMA_MAX_LOADED_MODELS=1
 export OLLAMA_FLASH_ATTENTION=true
 export OLLAMA_KEEP_ALIVE=30m
 
+# Force CUDA backend — prevents MLX initialization crash on non-Apple hardware
+export OLLAMA_LLM_LIBRARY=cuda_v12
+
 # Force Python to flush stdout/stderr immediately (so prints appear in Runpod logs)
 export PYTHONUNBUFFERED=1
 
