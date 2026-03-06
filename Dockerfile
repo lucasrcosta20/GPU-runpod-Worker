@@ -26,7 +26,7 @@ RUN curl -fsSL https://ollama.com/install.sh | sh
 WORKDIR /app
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --ignore-installed -r requirements.txt
 
 # ---- Bake Ollama models ----
 # Start Ollama temporarily to pull models, then stop
