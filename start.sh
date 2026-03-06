@@ -6,6 +6,13 @@ export PATH=$PATH:/usr/local/bin
 
 echo "=== GPU Worker Starting ==="
 
+# 0. Ensure Ollama is installed (template base may not include it)
+if ! command -v ollama &> /dev/null; then
+    echo "Ollama not found, installing..."
+    curl -fsSL https://ollama.com/install.sh | sh
+    echo "Ollama installed."
+fi
+
 # 1. Auto-detect VRAM and configure Ollama parallelism BEFORE starting
 #
 # CRITICAL: The old formula was wrong — it didn't account for KV cache scaling
@@ -79,7 +86,17 @@ for i in $(seq 1 30); do
     sleep 1
 done
 
-# 3. List available models
+# 3. Ensure required models are available (pull if missing)
+DEFAULT_MODEL=${DEFAULT_MODEL:-llama3.1:8b}
+REQUIRED_MODELS="${DEFAULT_MODEL} qwen2.5vl:3b qwen2.5vl:7b"
+
+for model in $REQUIRED_MODELS; do
+    if ! ollama list 2>/dev/null | grep -q "^${model}"; then
+        echo "Model $model not found, pulling..."
+        ollama pull "$model"
+    fi
+done
+
 echo "Available models:"
 ollama list
 
