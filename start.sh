@@ -6,10 +6,14 @@ export PATH=$PATH:/usr/local/bin
 
 echo "=== GPU Worker Starting ==="
 
-# 0. Ensure Ollama is installed (template base may not include it)
+# 0. Force CUDA backend BEFORE anything else — prevents MLX initialization crash
+# on Linux/CUDA hardware. MLX is Apple-only but Ollama tries to init it anyway.
+export OLLAMA_LLM_LIBRARY=cuda_v12
+
+# 0b. Ensure Ollama is installed (template base may not include it)
 if ! command -v ollama &> /dev/null; then
-    echo "Ollama not found, installing version 0.6.2 (latest has MLX crash bug)..."
-    curl -fsSL https://ollama.com/install.sh | OLLAMA_VERSION=0.6.2 sh
+    echo "Ollama not found, installing..."
+    curl -fsSL https://ollama.com/install.sh | sh
     echo "Ollama installed."
 fi
 
@@ -59,9 +63,6 @@ export OLLAMA_NUM_PARALLEL=$PARALLEL
 export OLLAMA_MAX_LOADED_MODELS=1
 export OLLAMA_FLASH_ATTENTION=true
 export OLLAMA_KEEP_ALIVE=30m
-
-# Force CUDA backend — prevents MLX initialization crash on non-Apple hardware
-export OLLAMA_LLM_LIBRARY=cuda_v12
 
 # Force Python to flush stdout/stderr immediately (so prints appear in Runpod logs)
 export PYTHONUNBUFFERED=1

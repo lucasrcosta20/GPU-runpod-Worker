@@ -19,8 +19,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Ollama (pinned — latest has MLX crash bug on Linux/CUDA)
-RUN curl -fsSL https://ollama.com/install.sh | OLLAMA_VERSION=0.6.2 sh
+# Install Ollama (latest — MLX crash on Linux is handled via OLLAMA_LLM_LIBRARY=cuda_v12)
+RUN curl -fsSL https://ollama.com/install.sh | sh
+
+# Force CUDA backend globally — prevents MLX initialization crash on non-Apple hardware.
+# This MUST be set before any `ollama serve` (including model baking below).
+ENV OLLAMA_LLM_LIBRARY=cuda_v12
 
 # ---- Python dependencies ----
 WORKDIR /app
