@@ -19,8 +19,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Ollama
-RUN curl -fsSL https://ollama.com/install.sh | sh
+# Install Ollama (pinned — latest has MLX crash bug on Linux/CUDA)
+RUN curl -fsSL https://ollama.com/install.sh | OLLAMA_VERSION=0.6.2 sh
 
 # ---- Python dependencies ----
 WORKDIR /app

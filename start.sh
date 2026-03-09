@@ -8,8 +8,8 @@ echo "=== GPU Worker Starting ==="
 
 # 0. Ensure Ollama is installed (template base may not include it)
 if ! command -v ollama &> /dev/null; then
-    echo "Ollama not found, installing..."
-    curl -fsSL https://ollama.com/install.sh | sh
+    echo "Ollama not found, installing version 0.6.2 (latest has MLX crash bug)..."
+    curl -fsSL https://ollama.com/install.sh | OLLAMA_VERSION=0.6.2 sh
     echo "Ollama installed."
 fi
 
