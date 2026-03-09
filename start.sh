@@ -74,18 +74,36 @@ export LD_LIBRARY_PATH="/usr/local/lib/ollama/mlx_cuda_v13:/usr/local/lib/ollama
 
 # 2. Start Ollama in background
 echo "Starting Ollama (OLLAMA_NUM_PARALLEL=$OLLAMA_NUM_PARALLEL)..."
-ollama serve &
+echo "Ollama version: $(ollama --version 2>&1 || echo 'unknown')"
+echo "OLLAMA_LLM_LIBRARY=$OLLAMA_LLM_LIBRARY"
+ollama serve 2>&1 &
 OLLAMA_PID=$!
 
-# Wait for Ollama to be ready
-echo "Waiting for Ollama to be ready..."
-for i in $(seq 1 30); do
+# Wait for Ollama to be ready (check both API and process liveness)
+echo "Waiting for Ollama to be ready (PID=$OLLAMA_PID)..."
+for i in $(seq 1 60); do
+    # Check if process is still alive
+    if ! kill -0 $OLLAMA_PID 2>/dev/null; then
+        echo "ERROR: Ollama process died (PID=$OLLAMA_PID)"
+        echo "Ollama may have crashed during initialization."
+        echo "Retrying with CPU-only mode..."
+        export OLLAMA_LLM_LIBRARY=cpu_avx2
+        ollama serve 2>&1 &
+        OLLAMA_PID=$!
+        sleep 5
+        if curl -s http://localhost:11434/api/tags > /dev/null 2>&1; then
+            echo "Ollama started in CPU mode (fallback). GPU inference disabled."
+            break
+        fi
+        echo "ERROR: Ollama also failed in CPU mode"
+        exit 1
+    fi
     if curl -s http://localhost:11434/api/tags > /dev/null 2>&1; then
         echo "Ollama is ready."
         break
     fi
-    if [ $i -eq 30 ]; then
-        echo "ERROR: Ollama failed to start after 30s"
+    if [ $i -eq 60 ]; then
+        echo "ERROR: Ollama failed to start after 60s"
         exit 1
     fi
     sleep 1
