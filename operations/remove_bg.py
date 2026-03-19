@@ -137,23 +137,46 @@ def _get_session(model_name: str) -> Any:
         sess_opts.intra_op_num_threads = 4
         sess_opts.inter_op_num_threads = 4
 
-        # Detect CUDA availability once
+        # Detect CUDA availability once (test real initialization, not just provider list)
         if _cuda_available is None:
             available_providers = ort.get_available_providers()
             if "CUDAExecutionProvider" in available_providers:
-                # Test if CUDA actually works (cuDNN might be missing)
                 try:
-                    test_opts = ort.SessionOptions()
-                    # Minimal test: create a tiny session with CUDA
-                    # If cuDNN is broken, this will throw
+                    # Real test: create a minimal ONNX session with CUDA
+                    # This catches cuDNN missing/incompatible at detection time
                     import numpy as np
-                    _test_input = np.zeros((1, 1), dtype=np.float32)
-                    # Just check if provider initializes without error
-                    _cuda_available = True
-                    print("[REMBG] CUDAExecutionProvider available — using GPU")
-                except Exception:
+                    import tempfile
+                    import onnx
+                    from onnx import helper, TensorProto
+
+                    # Create minimal ONNX model (identity op)
+                    X = helper.make_tensor_value_info("X", TensorProto.FLOAT, [1])
+                    Y = helper.make_tensor_value_info("Y", TensorProto.FLOAT, [1])
+                    node = helper.make_node("Identity", ["X"], ["Y"])
+                    graph = helper.make_graph([node], "test", [X], [Y])
+                    model = helper.make_model(graph, opset_imports=[helper.make_opsetid("", 13)])
+
+                    with tempfile.NamedTemporaryFile(suffix=".onnx", delete=False) as f:
+                        onnx.save(model, f.name)
+                        test_session = ort.InferenceSession(
+                            f.name,
+                            providers=["CUDAExecutionProvider", "CPUExecutionProvider"],
+                        )
+                        # Check which provider was actually used
+                        active = test_session.get_providers()
+                        del test_session
+                        import os
+                        os.unlink(f.name)
+
+                    if "CUDAExecutionProvider" in active:
+                        _cuda_available = True
+                        print("[REMBG] CUDAExecutionProvider tested OK — using GPU")
+                    else:
+                        _cuda_available = False
+                        print("[REMBG] CUDAExecutionProvider fell back to CPU during test — using CPU only")
+                except Exception as e:
                     _cuda_available = False
-                    print("[REMBG] CUDAExecutionProvider failed (cuDNN issue) — using CPU")
+                    print(f"[REMBG] CUDAExecutionProvider test failed: {e} — using CPU only")
             else:
                 _cuda_available = False
                 print("[REMBG] CUDAExecutionProvider not installed — using CPU")
