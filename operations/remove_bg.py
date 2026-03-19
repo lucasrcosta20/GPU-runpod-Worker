@@ -10,6 +10,7 @@ to free ~13GB VRAM for onnxruntime CUDAExecutionProvider.
 import base64
 import gc
 import io
+import os
 import time
 from typing import Any, Dict
 
@@ -17,6 +18,33 @@ from PIL import Image
 
 from operations.gpu_info import get_gpu_name
 from operations.ollama_vram import ollama_vram_free
+
+
+# ── Ensure cuDNN is discoverable BEFORE onnxruntime is imported ──
+# onnxruntime uses dlopen("libcudnn.so.9") which reads LD_LIBRARY_PATH
+# at load time. If the path isn't set before the first import, CUDA
+# initialization fails and gets cached permanently.
+# This runs at module import time (before any onnxruntime import).
+def _ensure_cudnn_path():
+    """Add cuDNN library paths to LD_LIBRARY_PATH if not already present.
+
+    IMPORTANT: Only add pip-installed nvidia-cudnn (9.1.0, compatible with CUDA 12.4).
+    Do NOT add Ollama's bundled cuDNN (9.20.0) — it's incompatible and causes
+    cudnnCreate() to fail with CUDNN_STATUS_NOT_INITIALIZED (error 1001).
+    """
+    current = os.environ.get("LD_LIBRARY_PATH", "")
+
+    # pip-installed nvidia-cudnn (compatible version)
+    try:
+        import nvidia.cudnn
+        pip_path = os.path.dirname(nvidia.cudnn.__file__) + "/lib"
+        if os.path.isdir(pip_path) and pip_path not in current:
+            os.environ["LD_LIBRARY_PATH"] = pip_path + ":" + current
+            print(f"[REMBG] Added pip cuDNN to LD_LIBRARY_PATH: {pip_path}")
+    except ImportError:
+        pass
+
+_ensure_cudnn_path()
 
 
 # Cache sessions to avoid reloading models per request
@@ -149,7 +177,6 @@ def _get_session(model_name: str) -> Any:
                     # The model is built as raw protobuf bytes — no `onnx` package needed.
                     # It's a trivial Identity op (X → Y, float[1]).
                     import tempfile
-                    import os
 
                     def _build_minimal_onnx() -> bytes:
                         """Build minimal valid ONNX model as raw protobuf bytes."""
