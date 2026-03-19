@@ -142,31 +142,65 @@ def _get_session(model_name: str) -> Any:
             available_providers = ort.get_available_providers()
             if "CUDAExecutionProvider" in available_providers:
                 try:
-                    # Real test: create a minimal ONNX session with CUDA
+                    # Real test: create a minimal ONNX model and run it with CUDA.
                     # This catches cuDNN missing/incompatible at detection time
-                    import numpy as np
+                    # rather than failing on the first real rembg inference.
+                    #
+                    # The model is built as raw protobuf bytes — no `onnx` package needed.
+                    # It's a trivial Identity op (X → Y, float[1]).
                     import tempfile
-                    import onnx
-                    from onnx import helper, TensorProto
+                    import os
 
-                    # Create minimal ONNX model (identity op)
-                    X = helper.make_tensor_value_info("X", TensorProto.FLOAT, [1])
-                    Y = helper.make_tensor_value_info("Y", TensorProto.FLOAT, [1])
-                    node = helper.make_node("Identity", ["X"], ["Y"])
-                    graph = helper.make_graph([node], "test", [X], [Y])
-                    model = helper.make_model(graph, opset_imports=[helper.make_opsetid("", 13)])
+                    def _build_minimal_onnx() -> bytes:
+                        """Build minimal valid ONNX model as raw protobuf bytes."""
+                        def varint(n):
+                            out = bytearray()
+                            while n > 0x7F:
+                                out.append((n & 0x7F) | 0x80)
+                                n >>= 7
+                            out.append(n & 0x7F)
+                            return bytes(out)
 
-                    with tempfile.NamedTemporaryFile(suffix=".onnx", delete=False) as f:
-                        onnx.save(model, f.name)
+                        def field(fnum, wire, data):
+                            tag = (fnum << 3) | wire
+                            if wire == 2:  # length-delimited
+                                return varint(tag) + varint(len(data)) + data
+                            if wire == 0:  # varint
+                                return varint(tag) + varint(data)
+                            return b""
+
+                        # TensorTypeProto: elem_type=1 (FLOAT)
+                        tensor_type = field(1, 0, 1)
+                        # TypeProto: tensor_type (field 1)
+                        type_proto = field(1, 2, tensor_type)
+                        # ValueInfoProto for X and Y
+                        vi_x = field(1, 2, b"X") + field(2, 2, type_proto)
+                        vi_y = field(1, 2, b"Y") + field(2, 2, type_proto)
+                        # NodeProto: input="X", output="Y", op_type="Identity"
+                        node = field(1, 2, b"X") + field(2, 2, b"Y") + field(4, 2, b"Identity")
+                        # GraphProto
+                        graph = field(1, 2, node) + field(2, 2, b"test") + field(11, 2, vi_x) + field(12, 2, vi_y)
+                        # OperatorSetIdProto: version=13
+                        opset = field(2, 0, 13)
+                        # ModelProto: ir_version=7, opset_import, graph
+                        return field(1, 0, 7) + field(8, 2, opset) + field(7, 2, graph)
+
+                    model_bytes = _build_minimal_onnx()
+                    tmp_path = None
+                    try:
+                        with tempfile.NamedTemporaryFile(suffix=".onnx", delete=False) as f:
+                            f.write(model_bytes)
+                            tmp_path = f.name
+
                         test_session = ort.InferenceSession(
-                            f.name,
+                            tmp_path,
                             providers=["CUDAExecutionProvider", "CPUExecutionProvider"],
                         )
-                        # Check which provider was actually used
                         active = test_session.get_providers()
                         del test_session
-                        import os
-                        os.unlink(f.name)
+                    finally:
+                        if tmp_path and os.path.exists(tmp_path):
+                            os.unlink(tmp_path)
 
                     if "CUDAExecutionProvider" in active:
                         _cuda_available = True
