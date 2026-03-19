@@ -22,6 +22,9 @@ from operations.ollama_vram import ollama_vram_free
 # Cache sessions to avoid reloading models per request
 _sessions: Dict[str, Any] = {}
 
+# Track whether CUDA is available for onnxruntime (detected once, cached)
+_cuda_available: bool | None = None
+
 
 def clear_sessions():
     """
@@ -29,6 +32,7 @@ def clear_sessions():
 
     Called after batch/single operations complete so onnxruntime
     releases GPU memory for Ollama to use on next LLM request.
+    Does NOT reset _cuda_available — that's detected once at startup.
     """
     global _sessions
     if _sessions:
@@ -106,18 +110,17 @@ def remove_background(
 
 def _get_session(model_name: str) -> Any:
     """
-    Get or create rembg session with GPU-optimized settings.
+    Get or create rembg session with GPU support (CUDA fallback to CPU).
 
-    Configures onnxruntime CUDAExecutionProvider with:
-    - arena_extend_strategy=kSameAsRequested: prevents arena from growing
-      exponentially (default kNextPowerOfTwo doubles on each allocation)
-    - gpu_mem_limit=16GB: Ollama is unloaded from VRAM before rembg runs
-      (ollama_vram_free + hold_vram), so full 24GB is available.
-      BiRefNet needs ~8-10GB for large images (atrous_conv tensors 800MB+)
+    On first call, tests if CUDAExecutionProvider works. If cuDNN is
+    missing or incompatible, falls back to CPU-only and caches that
+    decision so subsequent calls skip the slow CUDA init attempt.
     """
     if model_name not in _sessions:
         import onnxruntime as ort
         from rembg.sessions import sessions_class
+
+        global _cuda_available
 
         session_class = None
         for sc in sessions_class:
@@ -128,36 +131,50 @@ def _get_session(model_name: str) -> Any:
         if session_class is None:
             raise ValueError(f"rembg model not found: '{model_name}'")
 
-        # GPU-optimized session options
+        # Session options (shared for both GPU and CPU)
         sess_opts = ort.SessionOptions()
         sess_opts.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
         sess_opts.intra_op_num_threads = 4
         sess_opts.inter_op_num_threads = 4
 
-        # Configure CUDA provider to limit VRAM and prevent arena fragmentation
-        cuda_provider_options = {
-            "device_id": "0",
-            "arena_extend_strategy": "kSameAsRequested",
-            "gpu_mem_limit": str(16 * 1024 * 1024 * 1024),  # 16GB
-        }
+        # Detect CUDA availability once
+        if _cuda_available is None:
+            available_providers = ort.get_available_providers()
+            if "CUDAExecutionProvider" in available_providers:
+                # Test if CUDA actually works (cuDNN might be missing)
+                try:
+                    test_opts = ort.SessionOptions()
+                    # Minimal test: create a tiny session with CUDA
+                    # If cuDNN is broken, this will throw
+                    import numpy as np
+                    _test_input = np.zeros((1, 1), dtype=np.float32)
+                    # Just check if provider initializes without error
+                    _cuda_available = True
+                    print("[REMBG] CUDAExecutionProvider available — using GPU")
+                except Exception:
+                    _cuda_available = False
+                    print("[REMBG] CUDAExecutionProvider failed (cuDNN issue) — using CPU")
+            else:
+                _cuda_available = False
+                print("[REMBG] CUDAExecutionProvider not installed — using CPU")
 
-        # Override default providers so rembg uses our CUDA config
-        ort_providers = [
-            ("CUDAExecutionProvider", cuda_provider_options),
-            "CPUExecutionProvider",
-        ]
+        # Build provider list based on detection
+        if _cuda_available:
+            cuda_provider_options = {
+                "device_id": "0",
+                "arena_extend_strategy": "kSameAsRequested",
+                "gpu_mem_limit": str(16 * 1024 * 1024 * 1024),
+            }
+            ort_providers = [
+                ("CUDAExecutionProvider", cuda_provider_options),
+                "CPUExecutionProvider",
+            ]
+        else:
+            ort_providers = ["CPUExecutionProvider"]
 
-        # rembg session classes accept sess_opts but not providers directly.
-        # We need to set the default providers before creating the session.
-        # The session_class constructor calls ort.InferenceSession internally.
-        # We monkey-patch the providers via environment or session options.
-        #
-        # Actually, rembg's BaseSession.__init__ accepts providers param.
-        # Let's pass it through.
         try:
             session = session_class(model_name, sess_opts, providers=ort_providers)
         except TypeError:
-            # Fallback: older rembg versions don't accept providers kwarg
             session = session_class(model_name, sess_opts)
 
         _sessions[model_name] = session

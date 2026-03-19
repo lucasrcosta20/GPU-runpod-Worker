@@ -67,10 +67,28 @@ export OLLAMA_KEEP_ALIVE=30m
 # Force Python to flush stdout/stderr immediately (so prints appear in Runpod logs)
 export PYTHONUNBUFFERED=1
 
-# cuDNN 9 is bundled with Ollama at a non-standard path.
-# onnxruntime-gpu needs it in LD_LIBRARY_PATH to use CUDAExecutionProvider for rembg.
-# Include both Ollama's bundled cuDNN and the pip-installed nvidia-cudnn path.
-export LD_LIBRARY_PATH="/usr/local/lib/ollama/mlx_cuda_v13:/usr/local/lib/ollama/cuda_v13:${LD_LIBRARY_PATH:-}"
+# cuDNN is needed by onnxruntime-gpu (CUDAExecutionProvider) for rembg.
+# Ollama bundles cuDNN at a non-standard path that changes between versions.
+# Auto-detect all Ollama lib dirs that contain libcudnn*.so.
+OLLAMA_LIB_DIRS=""
+if [ -d /usr/local/lib/ollama ]; then
+    for dir in /usr/local/lib/ollama/*/; do
+        if ls "$dir"libcudnn* &>/dev/null 2>&1; then
+            OLLAMA_LIB_DIRS="${OLLAMA_LIB_DIRS:+$OLLAMA_LIB_DIRS:}$dir"
+        fi
+    done
+    # Also check the base ollama lib dir itself
+    if ls /usr/local/lib/ollama/libcudnn* &>/dev/null 2>&1; then
+        OLLAMA_LIB_DIRS="${OLLAMA_LIB_DIRS:+$OLLAMA_LIB_DIRS:}/usr/local/lib/ollama"
+    fi
+fi
+# Also include pip-installed nvidia-cudnn if present
+PIP_CUDNN=$(python -c "import nvidia.cudnn; import os; print(os.path.dirname(nvidia.cudnn.__file__) + '/lib')" 2>/dev/null || true)
+if [ -n "$PIP_CUDNN" ] && [ -d "$PIP_CUDNN" ]; then
+    OLLAMA_LIB_DIRS="${OLLAMA_LIB_DIRS:+$OLLAMA_LIB_DIRS:}$PIP_CUDNN"
+fi
+export LD_LIBRARY_PATH="${OLLAMA_LIB_DIRS:+$OLLAMA_LIB_DIRS:}${LD_LIBRARY_PATH:-}"
+echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
 
 # 2. Start Ollama in background
 echo "Starting Ollama (OLLAMA_NUM_PARALLEL=$OLLAMA_NUM_PARALLEL)..."
