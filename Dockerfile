@@ -51,7 +51,7 @@ ADD https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x
 
 # Pre-download rembg models (triggers ONNX model download)
 RUN python -c "from rembg.sessions import sessions_class; \
-    models = ['birefnet-general', 'birefnet-massive', 'bria-rmbg', 'isnet-general-use']; \
+    models = ['birefnet-general', 'bria-rmbg']; \
     [sc(name, None) for name in models for sc in sessions_class if sc.name() == name]" \
     || true
 
