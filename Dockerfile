@@ -38,9 +38,8 @@ ENV OLLAMA_MODELS=/root/.ollama/models
 
 RUN ollama serve & \
     sleep 5 && \
-    ollama pull llama3.1:8b && \
-    ollama pull qwen2.5vl:3b && \
-    ollama pull qwen2.5vl:7b && \
+    ollama pull qwen3.5:4b && \
+    ollama pull qwen3.5:9b && \
     kill %1 || true
 
 # ---- Bake image processing models ----
@@ -50,9 +49,10 @@ RUN mkdir -p /app/models
 ADD https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.1/RealESRGAN_x2plus.pth /app/models/
 ADD https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth /app/models/
 
-# Pre-download rembg BiRefNet model (triggers ONNX model download)
+# Pre-download rembg models (triggers ONNX model download)
 RUN python -c "from rembg.sessions import sessions_class; \
-    [sc('birefnet-general', None) for sc in sessions_class if sc.name() == 'birefnet-general']" \
+    models = ['birefnet-general', 'birefnet-massive', 'bria-rmbg', 'isnet-general-use']; \
+    [sc(name, None) for name in models for sc in sessions_class if sc.name() == name]" \
     || true
 
 ENV MODELS_DIR=/app/models

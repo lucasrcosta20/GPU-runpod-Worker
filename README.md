@@ -19,9 +19,8 @@ operações, orquestração de batch, checkpoints) permanece no `ia-cadastro`.
 │  └── operation: "resize"    → Pillow             │
 │                                                  │
 │  Ollama (localhost:11434)                        │
-│  ├── llama3.1:8b                                 │
-│  ├── qwen2.5vl:3b                                │
-│  └── qwen2.5vl:7b                                │
+│  ├── qwen3.5:4b                                 │
+│  └── qwen3.5:9b                                │
 │                                                  │
 │  GPU: NVIDIA RTX 4090 (24GB VRAM)                │
 └─────────────────────────────────────────────────┘
@@ -71,7 +70,7 @@ apps/gpu-worker/
 
 Todos os modelos são incluídos na imagem Docker (sem Network Volume):
 
-- **LLM**: llama3.1:8b (~4.7GB), qwen2.5vl:3b (~2GB), qwen2.5vl:7b (~4.5GB)
+- **LLM**: qwen3.5:4b (~3GB), qwen3.5:9b (~6GB)
 - **Upscale**: RealESRGAN_x2plus.pth (~64MB), RealESRGAN_x4plus.pth (~64MB)
 - **Remoção de fundo**: BiRefNet ONNX (~170MB, baixado pelo rembg no build)
 

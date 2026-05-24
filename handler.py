@@ -93,7 +93,7 @@ def handler(event: dict) -> dict:
 
 def _handle_llm(data: dict) -> dict:
     """Route LLM operation."""
-    model = data.get("model", "llama3.1:8b")
+    model = data.get("model", "qwen3.5:4b")
     prompt = data.get("prompt", "")
     system_prompt = data.get("system_prompt", "")
     temperature = data.get("temperature", 0.7)
@@ -121,7 +121,7 @@ def _handle_llm_batch(data: dict) -> dict:
     if not items:
         return {"error": "Missing 'items' field (list of prompts)"}
 
-    model = data.get("model", "llama3.1:8b")
+    model = data.get("model", "qwen3.5:4b")
     system_prompt = data.get("system_prompt", "")
     temperature = data.get("temperature", 0.7)
     max_tokens = data.get("max_tokens", 2000)

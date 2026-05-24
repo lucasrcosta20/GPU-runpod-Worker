@@ -18,7 +18,7 @@ from operations.llm import generate as generate_single
 
 def generate_batch(
     items: List[Dict[str, Any]],
-    model: str = "llama3.1:8b",
+    model: str = "qwen3.5:4b",
     system_prompt: str = "",
     temperature: float = 0.7,
     max_tokens: int = 2000,

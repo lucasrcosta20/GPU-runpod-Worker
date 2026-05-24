@@ -26,7 +26,7 @@ import requests
 
 
 OLLAMA_URL = "http://localhost:11434"
-DEFAULT_MODEL = os.environ.get("DEFAULT_MODEL", "llama3.1:8b")
+DEFAULT_MODEL = os.environ.get("DEFAULT_MODEL", "qwen3.5:4b")
 
 # Reference counting for nested/concurrent ollama_vram_free() calls.
 # Protected by lock since pod_server is threaded.
