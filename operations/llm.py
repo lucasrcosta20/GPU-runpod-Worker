@@ -28,7 +28,7 @@ def generate(
     Generate text via Ollama localhost.
 
     Args:
-        model: Model name (e.g. 'llama3.1:8b', 'qwen2.5vl:7b').
+        model: Model name (e.g. 'qwen3.5:4b', 'qwen3.5:9b').
         prompt: User prompt.
         system_prompt: System prompt.
         temperature: Generation temperature (0.0-2.0).

@@ -37,7 +37,7 @@ def test_llm():
     event = {
         "input": {
             "operation": "llm",
-            "model": "llama3.1:8b",
+            "model": "qwen3.5:4b",
             "prompt": "Diga 'teste ok' em uma palavra.",
             "system_prompt": "Responda de forma curta.",
             "temperature": 0.1,
@@ -146,7 +146,7 @@ def test_missing_hmac():
     event = {
         "input": {
             "operation": "llm",
-            "model": "llama3.1:8b",
+            "model": "qwen3.5:4b",
             "prompt": "test",
         }
     }

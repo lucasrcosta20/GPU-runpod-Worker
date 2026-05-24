@@ -35,7 +35,7 @@ fi
 VRAM_MB=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>/dev/null | head -1)
 if [ -n "$VRAM_MB" ]; then
     VRAM_GB=$((VRAM_MB / 1024))
-    MODEL_GB=5          # llama3.1:8b Q4_K_M weights
+    MODEL_GB=5          # qwen3.5:4b Q4_K_M weights
     OVERHEAD_GB=3       # compute graph + buffers + Ollama internal overhead
     RESERVE_GB=0        # no reserve needed — Ollama manages its own memory
     KV_PER_SLOT_GB=1    # KV cache per slot with num_ctx=2048: ~0.6GB KV + ~0.4GB buffers
@@ -124,8 +124,8 @@ for i in $(seq 1 60); do
 done
 
 # 3. Ensure required models are available (pull if missing)
-DEFAULT_MODEL=${DEFAULT_MODEL:-llama3.1:8b}
-REQUIRED_MODELS="${DEFAULT_MODEL} qwen2.5vl:3b qwen2.5vl:7b"
+DEFAULT_MODEL=${DEFAULT_MODEL:-qwen3.5:4b}
+REQUIRED_MODELS="${DEFAULT_MODEL} qwen3.5:4b qwen3.5:9b"
 
 for model in $REQUIRED_MODELS; do
     if ! ollama list 2>/dev/null | grep -q "^${model}"; then
@@ -141,7 +141,7 @@ ollama list
 # Skipped — with KEEP_ALIVE=30m the model loads on first LLM request
 # and unloads after 30min idle. Image operations (rembg, upscale)
 # use hold_vram/release_vram for explicit VRAM management.
-DEFAULT_MODEL=${DEFAULT_MODEL:-llama3.1:8b}
+DEFAULT_MODEL=${DEFAULT_MODEL:-qwen3.5:4b}
 echo "Model $DEFAULT_MODEL will load on first LLM request (KEEP_ALIVE=30m)"
 
 # 5. Start worker (Serverless handler or Pod HTTP server)

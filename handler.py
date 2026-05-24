@@ -25,13 +25,14 @@ from operations.remove_bg_batch import remove_background_batch
 from operations.upscale import upscale
 from operations.upscale_batch import upscale_batch as upscale_batch_op
 from operations.resize import resize
+from operations.outpaint import outpaint
 
 
 VALID_OPERATIONS = {
     "health", "llm", "llm_batch",
     "remove_bg", "remove_bg_batch",
     "upscale", "upscale_batch",
-    "resize",
+    "resize", "outpaint",
 }
 
 
@@ -87,13 +88,16 @@ def handler(event: dict) -> dict:
         if operation == "resize":
             return _handle_resize(input_data)
 
+        if operation == "outpaint":
+            return _handle_outpaint(input_data)
+
     except Exception as e:
         return {"error": f"Worker error: {type(e).__name__}: {str(e)[:500]}"}
 
 
 def _handle_llm(data: dict) -> dict:
     """Route LLM operation."""
-    model = data.get("model", "llama3.1:8b")
+    model = data.get("model", "qwen3.5:4b")
     prompt = data.get("prompt", "")
     system_prompt = data.get("system_prompt", "")
     temperature = data.get("temperature", 0.7)
@@ -121,7 +125,7 @@ def _handle_llm_batch(data: dict) -> dict:
     if not items:
         return {"error": "Missing 'items' field (list of prompts)"}
 
-    model = data.get("model", "llama3.1:8b")
+    model = data.get("model", "qwen3.5:4b")
     system_prompt = data.get("system_prompt", "")
     temperature = data.get("temperature", 0.7)
     max_tokens = data.get("max_tokens", 2000)
@@ -231,6 +235,26 @@ def _handle_resize(data: dict) -> dict:
         filename=filename,
         target_size=config.get("target_size", [1392, 1152]),
         jpg_quality=config.get("jpg_quality", 98),
+    )
+
+
+def _handle_outpaint(data: dict) -> dict:
+    """Route outpaint operation (FLUX.1 Fill Dev)."""
+    image = data.get("image", {})
+    image_data = image.get("data", "")
+    config = data.get("config", {})
+
+    if not image_data:
+        return {"error": "Missing 'image.data' field (base64)"}
+
+    return outpaint(
+        image_data=image_data,
+        target_width=config.get("target_width", 1392),
+        target_height=config.get("target_height", 1152),
+        prompt=config.get("prompt", "extend the scene naturally, maintaining the same style and lighting"),
+        num_inference_steps=config.get("num_inference_steps", 28),
+        guidance_scale=config.get("guidance_scale", 30.0),
+        seed=config.get("seed"),
     )
 
 

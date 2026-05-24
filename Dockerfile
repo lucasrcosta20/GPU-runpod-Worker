@@ -38,9 +38,9 @@ ENV OLLAMA_MODELS=/root/.ollama/models
 
 RUN ollama serve & \
     sleep 5 && \
-    ollama pull llama3.1:8b && \
-    ollama pull qwen2.5vl:3b && \
-    ollama pull qwen2.5vl:7b && \
+    ollama pull qwen3.5:4b && \
+    ollama pull qwen3.5:4b && \
+    ollama pull qwen3.5:9b && \
     kill %1 || true
 
 # ---- Bake image processing models ----
@@ -54,6 +54,11 @@ ADD https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x
 RUN python -c "from rembg.sessions import sessions_class; \
     [sc('birefnet-general', None) for sc in sessions_class if sc.name() == 'birefnet-general']" \
     || true
+
+# Pre-download FLUX.1 Fill Dev model for outpainting (~24GB)
+RUN python -c "from diffusers import FluxFillPipeline; \
+    FluxFillPipeline.from_pretrained('black-forest-labs/FLUX.1-Fill-dev', torch_dtype='auto')" \
+    || echo 'FLUX Fill Dev download skipped (will download on first use)'
 
 ENV MODELS_DIR=/app/models
 
