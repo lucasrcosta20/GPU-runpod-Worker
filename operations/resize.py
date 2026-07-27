@@ -33,7 +33,7 @@ def resize(
         'processing_time_seconds', 'gpu_device'.
     """
     if target_size is None:
-        target_size = [1392, 1152]
+        target_size = [928, 1152]
 
     start = time.time()
 

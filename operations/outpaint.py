@@ -50,7 +50,7 @@ def _get_pipeline():
 
 def outpaint(
     image_data: str,
-    target_width: int = 1392,
+    target_width: int = 928,
     target_height: int = 1152,
     prompt: str = "extend the scene naturally, maintaining the same style and lighting",
     num_inference_steps: int = 28,

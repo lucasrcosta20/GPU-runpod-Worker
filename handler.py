@@ -233,7 +233,7 @@ def _handle_resize(data: dict) -> dict:
     return resize(
         image_data=image_data,
         filename=filename,
-        target_size=config.get("target_size", [1392, 1152]),
+        target_size=config.get("target_size", [928, 1152]),
         jpg_quality=config.get("jpg_quality", 98),
     )
 
@@ -249,7 +249,7 @@ def _handle_outpaint(data: dict) -> dict:
 
     return outpaint(
         image_data=image_data,
-        target_width=config.get("target_width", 1392),
+        target_width=config.get("target_width", 928),
         target_height=config.get("target_height", 1152),
         prompt=config.get("prompt", "extend the scene naturally, maintaining the same style and lighting"),
         num_inference_steps=config.get("num_inference_steps", 28),
